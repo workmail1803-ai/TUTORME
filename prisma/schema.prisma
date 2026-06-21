@@ -1,0 +1,360 @@
+// ===========================================================================
+// TutorTrack — Prisma schema
+// Database: PostgreSQL (Supabase compatible)
+// Docs: see docs/ER-DIAGRAM.md for the visual model.
+// ===========================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // directUrl is used by `prisma migrate`/`db push` when DATABASE_URL is a
+  // pooled (pgbouncer) connection. Safe to leave equal to DATABASE_URL locally.
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  TUTOR
+  STUDENT
+  PARENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum ScheduleStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  RESCHEDULED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  RESCHEDULED
+  CANCELLED
+}
+
+enum HomeworkPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum HomeworkStatus {
+  PENDING
+  SUBMITTED
+  COMPLETED
+  OVERDUE
+}
+
+enum PaymentStatus {
+  PAID
+  DUE
+  OVERDUE
+}
+
+enum NoteVisibility {
+  PRIVATE // tutor only
+  SHARED // visible to student/parent
+}
+
+enum NotificationType {
+  UPCOMING_CLASS
+  HOMEWORK_ASSIGNED
+  HOMEWORK_DUE
+  FEE_REMINDER
+  SCHEDULE_CHANGE
+  ANNOUNCEMENT
+  ATTENDANCE_MARKED
+  PAYMENT_RECEIVED
+}
+
+// ---------------------------------------------------------------------------
+// Identity — mirrors a Clerk user. Created/updated via Clerk webhooks.
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(cuid())
+  clerkId   String   @unique
+  email     String   @unique
+  firstName String?
+  lastName  String?
+  imageUrl  String?
+  role      Role     @default(TUTOR)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutor         Tutor?
+  student       Student?
+  parent        Parent?
+  notifications Notification[]
+
+  @@index([role])
+}
+
+// ---------------------------------------------------------------------------
+// Tutor — the account that owns students, schedules, homework, payments.
+// ---------------------------------------------------------------------------
+
+model Tutor {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  headline   String?
+  bio        String?
+  subjects   String[] @default([])
+  timezone   String   @default("UTC")
+  hourlyRate Decimal? @db.Decimal(10, 2)
+  // Shareable code students enter to join this tutor.
+  inviteCode String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  students      Student[]
+  schedules     Schedule[]
+  homeworks     Homework[]
+  notes         Note[]
+  payments      Payment[]
+  announcements Announcement[]
+}
+
+// ---------------------------------------------------------------------------
+// Student — a person being tutored. May exist before they create a login
+// (userId is null until they claim the account with claimCode).
+// ---------------------------------------------------------------------------
+
+model Student {
+  id         String        @id @default(cuid())
+  tutorId    String
+  tutor      Tutor         @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  userId     String?       @unique
+  user       User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  parentId   String?
+  parent     Parent?       @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  // Code the student enters to link their login to this profile.
+  claimCode  String?       @unique
+  name       String
+  phone      String?
+  parentPhone String?
+  gradeClass String?
+  school     String?
+  subject    String?
+  monthlyFee Decimal?      @db.Decimal(10, 2)
+  address    String?
+  notes      String?
+  status     StudentStatus @default(ACTIVE)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  schedules   Schedule[]
+  attendances Attendance[]
+  homeworks   Homework[]
+  noteEntries Note[]
+  payments    Payment[]
+
+  @@index([tutorId])
+  @@index([tutorId, status])
+  @@index([parentId])
+}
+
+// ---------------------------------------------------------------------------
+// Parent — optional monitor of one or more students.
+// ---------------------------------------------------------------------------
+
+model Parent {
+  id        String    @id @default(cuid())
+  userId    String?   @unique
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  phone     String?
+  email     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  students  Student[]
+}
+
+// ---------------------------------------------------------------------------
+// Schedule — a concrete class session occurrence. Recurring schedules are
+// expanded into multiple rows sharing a `seriesId`.
+// ---------------------------------------------------------------------------
+
+model Schedule {
+  id        String         @id @default(cuid())
+  tutorId   String
+  tutor     Tutor          @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId String
+  student   Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject   String?
+  location  String?
+  notes     String?
+  startTime DateTime
+  endTime   DateTime
+  status    ScheduleStatus @default(SCHEDULED)
+  // Groups occurrences generated from the same recurring rule.
+  seriesId  String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  attendance Attendance?
+
+  @@index([tutorId, startTime])
+  @@index([studentId, startTime])
+  @@index([seriesId])
+}
+
+// ---------------------------------------------------------------------------
+// Attendance — one record per class session (1:1 with Schedule).
+// ---------------------------------------------------------------------------
+
+model Attendance {
+  id         String           @id @default(cuid())
+  scheduleId String           @unique
+  schedule   Schedule         @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  status     AttendanceStatus
+  note       String?
+  markedAt   DateTime         @default(now())
+
+  @@index([studentId])
+  @@index([markedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Homework — assignment for a student. Completion tracked via submission.
+// ---------------------------------------------------------------------------
+
+model Homework {
+  id          String           @id @default(cuid())
+  tutorId     String
+  tutor       Tutor            @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    HomeworkPriority @default(MEDIUM)
+  status      HomeworkStatus   @default(PENDING)
+  attachments String[]         @default([])
+  notes       String?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  submission  HomeworkSubmission?
+
+  @@index([tutorId])
+  @@index([studentId, status])
+  @@index([dueDate])
+}
+
+// ---------------------------------------------------------------------------
+// HomeworkSubmission — the student's completion record (1:1 with Homework).
+// ---------------------------------------------------------------------------
+
+model HomeworkSubmission {
+  id          String   @id @default(cuid())
+  homeworkId  String   @unique
+  homework    Homework @relation(fields: [homeworkId], references: [id], onDelete: Cascade)
+  studentId   String
+  content     String?
+  attachments String[] @default([])
+  grade       String?
+  feedback    String?
+  submittedAt DateTime @default(now())
+
+  @@index([studentId])
+}
+
+// ---------------------------------------------------------------------------
+// Note — teacher feedback after a session. Visibility controls student access.
+// ---------------------------------------------------------------------------
+
+model Note {
+  id         String         @id @default(cuid())
+  tutorId    String
+  tutor      Tutor          @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  scheduleId String?
+  content    String
+  visibility NoteVisibility @default(SHARED)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([tutorId])
+  @@index([studentId])
+}
+
+// ---------------------------------------------------------------------------
+// Payment — a monthly fee record for a student.
+// ---------------------------------------------------------------------------
+
+model Payment {
+  id          String        @id @default(cuid())
+  tutorId     String
+  tutor       Tutor         @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  studentId   String
+  student     Student       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  amount      Decimal       @db.Decimal(10, 2)
+  status      PaymentStatus @default(DUE)
+  // The billing period this payment covers.
+  periodMonth Int // 1-12
+  periodYear  Int
+  dueDate     DateTime?
+  paidAt      DateTime?
+  method      String?
+  note        String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([studentId, periodYear, periodMonth])
+  @@index([tutorId, status])
+  @@index([studentId])
+}
+
+// ---------------------------------------------------------------------------
+// Announcement — broadcast from a tutor to their students.
+// ---------------------------------------------------------------------------
+
+model Announcement {
+  id        String   @id @default(cuid())
+  tutorId   String
+  tutor     Tutor    @relation(fields: [tutorId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([tutorId])
+}
+
+// ---------------------------------------------------------------------------
+// Notification — per-user inbox item (mirrors a push notification).
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String?
+  // Arbitrary payload (e.g. { homeworkId, scheduleId }) for deep-linking.
+  data      Json?
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
