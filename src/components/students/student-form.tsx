@@ -35,6 +35,28 @@ const empty: Values = {
   notes: "",
 };
 
+// Defined at module scope (NOT inside the form) so it isn't recreated on every
+// keystroke — recreating it would remount inputs and steal focus.
+function Field({
+  id,
+  label,
+  error,
+  children,
+}: {
+  id: string;
+  label: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
 export function StudentForm({
   initial,
   submitLabel = "Save student",
@@ -82,27 +104,9 @@ export function StudentForm({
     });
   }
 
-  const Field = ({
-    name,
-    label,
-    children,
-  }: {
-    name: keyof Values;
-    label: string;
-    children: React.ReactNode;
-  }) => (
-    <div className="space-y-1.5">
-      <Label htmlFor={name}>{label}</Label>
-      {children}
-      {errors[name]?.[0] && (
-        <p className="text-xs text-destructive">{errors[name][0]}</p>
-      )}
-    </div>
-  );
-
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Field name="name" label="Full name *">
+      <Field id="name" label="Full name *" error={errors.name?.[0]}>
         <Input
           id="name"
           value={values.name}
@@ -114,7 +118,7 @@ export function StudentForm({
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field name="subject" label="Subject">
+        <Field id="subject" label="Subject" error={errors.subject?.[0]}>
           <Input
             id="subject"
             value={values.subject}
@@ -122,7 +126,7 @@ export function StudentForm({
             placeholder="Maths"
           />
         </Field>
-        <Field name="gradeClass" label="Class / Grade">
+        <Field id="gradeClass" label="Class / Grade" error={errors.gradeClass?.[0]}>
           <Input
             id="gradeClass"
             value={values.gradeClass}
@@ -132,7 +136,7 @@ export function StudentForm({
         </Field>
       </div>
 
-      <Field name="school" label="School">
+      <Field id="school" label="School" error={errors.school?.[0]}>
         <Input
           id="school"
           value={values.school}
@@ -142,7 +146,7 @@ export function StudentForm({
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field name="phone" label="Student phone">
+        <Field id="phone" label="Student phone" error={errors.phone?.[0]}>
           <Input
             id="phone"
             value={values.phone}
@@ -151,7 +155,7 @@ export function StudentForm({
             inputMode="tel"
           />
         </Field>
-        <Field name="parentPhone" label="Parent phone">
+        <Field id="parentPhone" label="Parent phone" error={errors.parentPhone?.[0]}>
           <Input
             id="parentPhone"
             value={values.parentPhone}
@@ -162,7 +166,7 @@ export function StudentForm({
         </Field>
       </div>
 
-      <Field name="monthlyFee" label="Monthly fee">
+      <Field id="monthlyFee" label="Monthly fee" error={errors.monthlyFee?.[0]}>
         <Input
           id="monthlyFee"
           value={values.monthlyFee}
@@ -175,7 +179,7 @@ export function StudentForm({
         />
       </Field>
 
-      <Field name="address" label="Address">
+      <Field id="address" label="Address" error={errors.address?.[0]}>
         <Input
           id="address"
           value={values.address}
@@ -184,7 +188,7 @@ export function StudentForm({
         />
       </Field>
 
-      <Field name="notes" label="Notes">
+      <Field id="notes" label="Notes" error={errors.notes?.[0]}>
         <Textarea
           id="notes"
           value={values.notes}
