@@ -11,9 +11,8 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  // directUrl is used by `prisma migrate`/`db push` when DATABASE_URL is a
-  // pooled (pgbouncer) connection. Safe to leave equal to DATABASE_URL locally.
-  directUrl = env("DIRECT_URL")
+  // NOTE: directUrl intentionally omitted so the runtime client only needs
+  // DATABASE_URL. Migrations run through the pooled URL (works on Supabase).
 }
 
 // ---------------------------------------------------------------------------
