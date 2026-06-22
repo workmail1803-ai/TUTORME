@@ -9,10 +9,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  // NOTE: directUrl intentionally omitted so the runtime client only needs
-  // DATABASE_URL. Migrations run through the pooled URL (works on Supabase).
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ---------------------------------------------------------------------------

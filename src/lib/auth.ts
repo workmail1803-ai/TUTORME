@@ -89,7 +89,7 @@ async function uniqueTutorInviteCode() {
 /**
  * Require a tutor context. Auto-provisions a Tutor profile for TUTOR-role users
  * who don't have one yet, so a freshly signed-up tutor lands straight on their
- * dashboard. Non-tutor users are sent to onboarding.
+ * dashboard. Students are sent to /portal; unknown roles go to onboarding.
  */
 export async function requireTutor(): Promise<{ user: User; tutor: Tutor }> {
   const user = await requireUser();
@@ -103,6 +103,9 @@ export async function requireTutor(): Promise<{ user: User; tutor: Tutor }> {
     return { user, tutor };
   }
 
+  // Students who land on tutor routes → send them to /portal, not /onboarding.
+  if (user.student) redirect("/portal");
+
   redirect("/onboarding");
 }
 
@@ -110,5 +113,9 @@ export async function requireTutor(): Promise<{ user: User; tutor: Tutor }> {
 export async function requireStudent(): Promise<{ user: User; student: Student }> {
   const user = await requireUser();
   if (user.student) return { user, student: user.student };
+
+  // Tutors who land on student routes → send them to /dashboard, not /onboarding.
+  if (user.tutor || user.role === "TUTOR") redirect("/dashboard");
+
   redirect("/onboarding");
 }
