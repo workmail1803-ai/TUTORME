@@ -227,6 +227,7 @@ model Attendance {
   markedAt   DateTime         @default(now())
 
   @@index([studentId])
+  @@index([studentId, status])
   @@index([markedAt])
 }
 
@@ -253,6 +254,7 @@ model Homework {
   submission  HomeworkSubmission?
 
   @@index([tutorId])
+  @@index([tutorId, status])
   @@index([studentId, status])
   @@index([dueDate])
 }

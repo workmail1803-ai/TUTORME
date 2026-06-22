@@ -60,30 +60,34 @@ export default async function StudentDetailPage({
   const { tutor } = await requireTutor();
   const { id } = await params;
 
-  const student = await prisma.student.findFirst({
-    where: { id, tutorId: tutor.id },
-    include: {
-      schedules: {
-        where: { startTime: { gte: new Date() } },
-        orderBy: { startTime: "asc" },
-        take: 5,
+  const [student, presentCount, totalAttendance] = await Promise.all([
+    prisma.student.findFirst({
+      where: { id, tutorId: tutor.id },
+      include: {
+        schedules: {
+          where: { startTime: { gte: new Date() } },
+          orderBy: { startTime: "asc" },
+          take: 5,
+        },
+        homeworks: { orderBy: { createdAt: "desc" }, take: 5 },
+        payments: {
+          orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
+          take: 6,
+        },
+        noteEntries: { orderBy: { createdAt: "desc" }, take: 5 },
       },
-      homeworks: { orderBy: { createdAt: "desc" }, take: 5 },
-      payments: {
-        orderBy: [{ periodYear: "desc" }, { periodMonth: "desc" }],
-        take: 6,
-      },
-      noteEntries: { orderBy: { createdAt: "desc" }, take: 5 },
-      attendances: true,
-    },
-  });
+    }),
+    prisma.attendance.count({
+      where: { studentId: id, status: "PRESENT" },
+    }),
+    prisma.attendance.count({
+      where: { studentId: id },
+    }),
+  ]);
 
   if (!student) notFound();
 
-  const present = student.attendances.filter(
-    (a) => a.status === "PRESENT",
-  ).length;
-  const attendanceRate = pct(present, student.attendances.length);
+  const attendanceRate = pct(presentCount, totalAttendance);
   const totalPaid = student.payments
     .filter((p) => p.status === "PAID")
     .reduce((s, p) => s + Number(p.amount), 0);

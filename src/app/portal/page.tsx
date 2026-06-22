@@ -23,7 +23,7 @@ export default async function PortalHomePage() {
   const { user, student } = await requireStudent();
   const now = new Date();
 
-  const [nextClass, pendingHw, announcements, attendance] = await Promise.all([
+  const [nextClass, pendingHw, announcements, presentCount, totalAttendance] = await Promise.all([
     prisma.schedule.findFirst({
       where: { studentId: student.id, startTime: { gte: now }, status: "SCHEDULED" },
       orderBy: { startTime: "asc" },
@@ -38,14 +38,15 @@ export default async function PortalHomePage() {
       orderBy: { createdAt: "desc" },
       take: 3,
     }),
-    prisma.attendance.findMany({
+    prisma.attendance.count({
+      where: { studentId: student.id, status: "PRESENT" },
+    }),
+    prisma.attendance.count({
       where: { studentId: student.id },
-      select: { status: true },
     }),
   ]);
 
-  const present = attendance.filter((a) => a.status === "PRESENT").length;
-  const rate = pct(present, attendance.length);
+  const rate = pct(presentCount, totalAttendance);
 
   return (
     <>
