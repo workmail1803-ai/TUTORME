@@ -46,9 +46,18 @@ export const getDbUser = cache(async function getDbUser() {
     cu.emailAddresses[0]?.emailAddress ??
     `${userId}@no-email.local`;
 
+  // Upsert by EMAIL (also unique) rather than clerkId. This re-links an existing
+  // account to a new Clerk ID — e.g. when the same person signs in under the
+  // production Clerk instance after a row was created under the dev instance —
+  // instead of inserting a duplicate email and hitting the unique constraint.
   return prisma.user.upsert({
-    where: { clerkId: userId },
-    update: {},
+    where: { email },
+    update: {
+      clerkId: userId,
+      firstName: cu.firstName,
+      lastName: cu.lastName,
+      imageUrl: cu.imageUrl,
+    },
     create: {
       clerkId: userId,
       email,
