@@ -16,7 +16,7 @@ export default function SignInPage() {
         },
       }}
       signUpUrl="/sign-up"
-      forceRedirectUrl="/dashboard"
+      forceRedirectUrl="/onboarding"
     />
   );
 }
